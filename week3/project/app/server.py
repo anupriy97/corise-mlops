@@ -1,3 +1,5 @@
+import datetime
+
 from fastapi import FastAPI
 from pydantic import BaseModel
 from loguru import logger
@@ -22,6 +24,9 @@ LOGS_OUTPUT_PATH = "../data/logs.out"
 
 app = FastAPI()
 
+news_category_classifier = NewsCategoryClassifier()
+logger.add(LOGS_OUTPUT_PATH)
+
 
 @app.on_event("startup")
 def startup_event():
@@ -29,11 +34,12 @@ def startup_event():
     [TO BE IMPLEMENTED]
     1. Initialize an instance of `NewsCategoryClassifier`.
     2. Load the serialized trained model parameters (pointed to by `MODEL_PATH`) into the NewsCategoryClassifier you initialized.
-    3. Open an output file to write logs, at the destimation specififed by `LOGS_OUTPUT_PATH`
+    3. Open an output file to write logs, at the destination specififed by `LOGS_OUTPUT_PATH`
         
     Access to the model instance and log file will be needed in /predict endpoint, make sure you
     store them as global variables
     """
+    news_category_classifier.load(model_path=MODEL_PATH)
     logger.info("Setup completed")
 
 
@@ -65,7 +71,26 @@ def predict(request: PredictRequest):
     }
     3. Construct an instance of `PredictResponse` and return
     """
-    response = PredictResponse(scores={"label1": 0.9, "label2": 0.1}, label="label1")
+    log_dict = {}
+
+    start_time = datetime.datetime.now()
+    log_dict['timestamp'] = start_time.strftime("%Y:%m:%d %H:%M:%S")
+
+    log_dict['request'] = request.dict()
+
+    scores = news_category_classifier.predict_proba(request.dict())
+    label = news_category_classifier.predict_label(request.dict())
+
+    response = PredictResponse(scores=scores, label=label)
+    log_dict['response'] = response.dict()
+
+    end_time = datetime.datetime.now()
+
+    latency = int((end_time.timestamp() - start_time.timestamp()) * 1000)
+    log_dict['latency'] = latency
+
+    logger.info(f"Log Predict API Call: {log_dict}")
+
     return response
 
 
